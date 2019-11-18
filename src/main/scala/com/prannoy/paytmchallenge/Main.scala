@@ -20,41 +20,64 @@ object Main {
                       f_id : String,
                       f_timestamp  : Long,
                       f_sid    : Int
+
                     );
 
   def main(args: Array[String]): Unit = {
 
-    val spark=SparkSession.builder().master("local[*]").appName("Paytm Web Log Challenge").getOrCreate()
+    val spark=SparkSession.builder().master("local[*]").appName("Prannoy Tank : Paytm Web Log Challenge").getOrCreate()
 
     import spark.implicits._
 
     spark.sparkContext.setLogLevel("ERROR")
 
-    val tmo2: Long = 60 * 60
-
-    println(System.getProperty("user.dir"))
-
-    //sys.exit
     val df = spark
       .read
       .option("delimiter"," ")
       .schema(getSchema())
       .csv(s"file:///${System.getProperty("user.dir")}/data/2015_07_22_mktplace_shop_web_log_sample.log.gz")
 
-     timeDifferenceFrameWise(df,spark)
-
-
+    // Getting the sessionized dataframe
     val sessionizedDf = timeDifferenceFrameWise(df,spark)
 
-    //sessionizedDf.show(50,false)
+    sessionizedDf.persist();
 
 
+    //////////////////////////////////////////
+    /// Average Session time per user
+    //////////////////////////////////////////
+    val firstLastSessionPerUserDf = sessionizedDf.groupBy($"uid").agg(first("time_diff_in_a_frame").as("first"), last("time_diff_in_a_frame").as("last"),countDistinct("sess_id").as("cnt"))
+
+    firstLastSessionPerUserDf.show(50,false)
+
+    val averageSessionTimePerUserDf = firstLastSessionPerUserDf.withColumn("averageSessionTime", (col("last") - col("first"))/col("cnt"))
+
+    averageSessionTimePerUserDf.show(50,false)
+
+
+    //////////////////////////////////////////
+    //// unique url visit count per user per session
+    //////////////////////////////////////////
     val uniqueUrlVisitPerSesion=sessionizedDf.groupBy($"uid",$"sess_id").agg(countDistinct($"request").as("count"))
 
     uniqueUrlVisitPerSesion.show(50,false)
 
 
-    //plainScalaLogicMethod()
+    //////////////////////////////////////////
+    //// Most Engaged user with max time per user per session
+    //////////////////////////////////////////
+    val firstLastSessionCountDf = sessionizedDf.groupBy($"uid",$"sess_id").agg(first("time_diff_in_a_frame").as("first"), last("time_diff_in_a_frame").as("last"),count("sess_id").as("cnt"))
+
+    //average and total time per user per session
+    val totalTimePerSessionDf = firstLastSessionCountDf
+      .withColumn("totalTimePerSession",col("last") - col("first"))
+      //.withColumn("averageSessionTime", (col("last") - col("first"))/col("cnt"))
+
+    //firstLastSessionCountDf.show(50,false)
+
+    // this will give most engaged user and the average session time
+    totalTimePerSessionDf.orderBy($"totalTimePerSession".desc).show(50,false)
+
 
      sys.exit()
 
@@ -209,7 +232,6 @@ object Main {
       .withColumn("timestamp_epoch",$"timestamp".cast("long"))
       //.withColumn("time_diff",$"timestamp".cast("long") - lag($"timestamp", 1).over(windowSpec).cast("long"))
       .withColumn("time_diff_in_a_frame",$"timestamp".cast("long") - first($"timestamp".cast("long"),true).over(windowSpec))
-        //.withColumn("time_diff_frame_minute",$"time_diff_in_a_frame"/60)
 
     val df2 = r1.
       groupBy("uid").agg(
@@ -221,13 +243,8 @@ object Main {
           $"uid", $"timestamp_epoch", $"ts_list"))
       )
         .select($"uid", $"click_sess_id.f_timestamp".as("timestamp_epoch"), $"click_sess_id.f_sid".as("sess_id"))
-    //df2.show(50,false)
 
     val df3 = df2.alias("a").join(r1.alias("b"),Seq("uid","timestamp_epoch"))
-
-
-    //df3.show(50,false)
-
     df3
   }
 
