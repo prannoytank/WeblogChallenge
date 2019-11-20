@@ -39,7 +39,7 @@ object AppConfig {
       case Array("--configFilePathString", filePathArg: String) => fileConfPathObj = createFileConfigPath(filePathArg)
     }
 
-    //val appConfig = ConfigFactory.parseFile(appFile)
+
     val appConfig = ConfigFactory.parseFile(parseApplicationConfigFiles)
 
     val config = ConfigFactory.parseMap(argsMap.asJava).withFallback(appConfig).resolve()

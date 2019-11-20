@@ -3,6 +3,39 @@ This is an interview challenge for Paytm Labs. Please feel free to fork. Pull Re
 
 The challenge is to make make analytical observations about the data using the distributed tools below.
 
+## Description
+
+1. Maven based project.
+2. Java 1.8 , scala 2.11.8
+3. Built and tested on Cloudera Quickstart VM (5.13)
+
+#### Libraries used
+1. Type safe config to read the configuration file
+2. Spark libraries like core,hive,sql
+
+
+## Command Line args for the application
+1. --filePath  Example: file:/// if local , hdfs:// if using hdfs]
+2. --runSequence Example: ["ETL",ML]
+3. --maxSessionTime Example: value in seconds
+
+## Usage
+IDE
+```$xslt
+If Running via IDE(Intellij) , directly run the application. 
+application.conf would be referenced from the resource directory
+```
+
+Cluster Mode
+```
+spark2-submit --class com.prannoy.paytmchallenge.Main --deploy-mode cluster --master yarn --files /home/cloudera/application.conf [jar location] --configFilePathString application.conf
+```
+Client Mode
+```$xslt
+spark2-submit --class com.prannoy.paytmchallenge.Main --deploy-mode cluster --master yarn-client --files /home/cloudera/application.conf [jar location] --configFilePathString [absolute path of application.conf]
+```
+
+
 ## Processing & Analytical goals:
 
 1. Sessionize the web log by IP. Sessionize = aggregrate all page hits by visitor/IP during a session.
