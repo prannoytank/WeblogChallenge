@@ -19,10 +19,7 @@
         <cats.version>1.6.0</cats.version>
         <typesafe.config>1.3.4</typesafe.config>
         <ficus.version>1.1.3</ficus.version>
-        <spinal.common.version>1.0.4</spinal.common.version>
         <scalatest.version>3.0.5</scalatest.version>
-        <pulsar.version>2.4.1</pulsar.version>
-        <pulsar-spark-connector.version>2.4.0</pulsar-spark-connector.version>
     </properties>
 
     <dependencies>
@@ -72,7 +69,11 @@
             <artifactId>scala-compiler</artifactId>
             <version>2.11.8</version>
         </dependency>
-
+        <dependency>
+            <groupId>com.typesafe</groupId>
+            <artifactId>config</artifactId>
+            <version>${typesafe.config}</version>
+        </dependency>
         <dependency>
             <groupId>org.scala-lang</groupId>
             <artifactId>scala-reflect</artifactId>
