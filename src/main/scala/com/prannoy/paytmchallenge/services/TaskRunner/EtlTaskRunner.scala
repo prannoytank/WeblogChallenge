@@ -2,7 +2,7 @@ package com.prannoy.paytmchallenge.services.TaskRunner
 
 import org.apache.spark.sql.{Column, ColumnName, DataFrame, SparkSession}
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{col, collect_list, concat, countDistinct, dense_rank, explode, first, last, lit, row_number, udf,unix_timestamp,sort_array,count}
+import org.apache.spark.sql.functions.{col, collect_list, concat, countDistinct, dense_rank, explode, first, last, lit, row_number, udf,unix_timestamp,sort_array,count,sum}
 import org.apache.spark.sql.types.{DataTypes, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 
 import scala.collection.mutable.ListBuffer
@@ -92,14 +92,15 @@ object EtlTaskRunner extends TaskRunnerTrait {
     //////////////////////////////////////////
     //// Most Engaged user
     //////////////////////////////////////////
-    val firstLastSessionCountDf = sessionizedDf.groupBy($"client:port").agg(first("timestamp_epoch").as("first"), last("timestamp_epoch").as("last"))
+    val firstLastSessionCountDf = sessionizedDf.groupBy($"client:port",$"sess_id").agg(first("timestamp_epoch").as("first"), last("timestamp_epoch").as("last"))
 
     val totalTimePerSessionDf = firstLastSessionCountDf
-      .withColumn("MaxSessionTimeInSeconds",col("last") - col("first"))
+      .withColumn("each_session_time",col("last") - col("first"))
+        .groupBy("client:port").agg(sum("each_session_time").as("total_web_usage"))
 
     println("Most engaged user")
     // this will give most engaged user and the average session time
-    totalTimePerSessionDf.orderBy($"MaxSessionTimeInSeconds".desc).show(50,false)
+    totalTimePerSessionDf.orderBy($"total_web_usage".desc).show(50,false)
 
   }
 
