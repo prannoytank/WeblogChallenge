@@ -14,7 +14,6 @@ object AppConfig {
 
   @transient private lazy val logger = LogManager.getLogger(this.getClass)
 
-  private var fileConfPathObj: List[String] = List.empty;
 
   private var appEntityObj: AppEntity = null;
 
@@ -32,56 +31,12 @@ object AppConfig {
       sys.exit(1)
     }
 
-    /**
-     * function to parse only the file config paths passed as arguments
-     */
-    args.sliding(2, 2).toList.collect {
-      case Array("--configFilePathString", filePathArg: String) => fileConfPathObj = createFileConfigPath(filePathArg)
-    }
-
-
     val appConfig = ConfigFactory.parseFile(new File(getClass.getResource("/application.conf").getPath))
 
     val config = ConfigFactory.parseMap(argsMap.asJava).withFallback(appConfig).resolve()
     appEntityObj = ConfigBeanFactory.create(config.getConfig("app"), classOf[AppEntity])
 
   }
-
-  private def parseApplicationConfigFiles(): File ={
-    var appFile: File = null
-
-    if (fileConfPathObj.isEmpty || fileConfPathObj == null) {
-      appFile = new File(getClass.getResource("/application.conf").getPath)
-    }
-
-    else if (fileConfPathObj.length >= 1 ) {
-      for (file <- fileConfPathObj) {
-        file.split("/").last match {
-          case s if s.contains("application.conf") => {
-            println("Setting up app conf")
-            appFile = new File(file)
-          }
-        }
-      }
-    }
-    //    else {
-    //      println("Need at-least 1 configuration file (application.conf,env.conf,workflow.conf)")
-    //      sys.exit(1)
-    //    }
-
-
-    if(appFile == null) {
-      println("Cannot parse the application config file.Exiting")
-      sys.exit(1)
-    }
-
-    appFile
-  }
-
-  private def createFileConfigPath(jsonString: String): List[String] = {
-    jsonString.split(",").map(_.trim).toList
-  }
-
 
   /**
    * Parse command line args

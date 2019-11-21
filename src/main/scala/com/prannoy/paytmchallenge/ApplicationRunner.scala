@@ -27,7 +27,9 @@ object ApplicationRunner {
     for (task <- appConfig.getRunSequence.asScala) {
       task.toLowerCase() match {
         case s if s.contains("etl") =>{
-          EtlTaskRunner.run()
+          println("---------------------- ETL JOB START ----------------------------------")
+          //EtlTaskRunner.run()
+          println("---------------------- ETL JOB END ------------------------------------")
         }
         case s if s.contains("streaming") => println("dummy spark streaming")
         case s if s.contains("ml") => println("dummy spark machine learning")

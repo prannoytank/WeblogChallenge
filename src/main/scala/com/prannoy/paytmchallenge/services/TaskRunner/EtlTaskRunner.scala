@@ -2,11 +2,17 @@ package com.prannoy.paytmchallenge.services.TaskRunner
 
 import org.apache.spark.sql.{Column, ColumnName, DataFrame, SparkSession}
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{col, collect_list, concat, countDistinct, dense_rank, explode, first, last, lit, row_number, udf,unix_timestamp,sort_array}
+import org.apache.spark.sql.functions.{col, collect_list, concat, countDistinct, dense_rank, explode, first, last, lit, row_number, udf,unix_timestamp,sort_array,count}
 import org.apache.spark.sql.types.{DataTypes, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 
 import scala.collection.mutable.ListBuffer
 import scala.util.control.Breaks.{break, breakable}
+
+import org.apache.spark.ml.feature._
+import org.apache.spark.ml.regression._
+import org.apache.spark.ml.evaluation.RegressionEvaluator
+
+
 
 object EtlTaskRunner extends TaskRunnerTrait {
 
@@ -22,12 +28,18 @@ object EtlTaskRunner extends TaskRunnerTrait {
     spark.sparkContext.setLogLevel("ERROR")
 
     //reading the file as csv from the data folder within the folder(file:///) , setting the schema , delimiter as space
+
+    println(appEntityObj.toString)
+
+    println("Reading the data.............")
     val df = spark
       .read
       .option("delimiter"," ")
       .schema(getSchema())
       .csv(appEntityObj.getFilePath)
 
+
+    println("Filtering the data ..................")
     /**
      * Filtering based on information provided at https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/access-log-collection.html#access-log-entry-format
      * Filtered columns : backend:port,request_processing_time,backend_processing_time,response_processing_time
@@ -38,10 +50,19 @@ object EtlTaskRunner extends TaskRunnerTrait {
       .filter($"response_processing_time" =!= -1)
         .withColumn("timestamp_epoch", unix_timestamp($"timestamp")) // converting timestamp to epoch timestamp(seconds)
 
+
+    println("Creating sessionzied dataframe ..................")
     // Getting the sessionized dataframe
     val sessionizedDf = sessionizeWebLogs(filteredDf,spark)
 
     sessionizedDf.persist();
+
+//
+//    val requestPerSecondDf = sessionizedDf.groupBy("timestamp_epoch").agg(count("request").alias("no_of_request"))
+//
+//    requestPerSecondDf.show(100,false)
+//
+//    //predictNoOfRequest(requestPerSecondDf)
 
     //////////////////////////////////////////
     /// Average Session time per user
@@ -66,6 +87,8 @@ object EtlTaskRunner extends TaskRunnerTrait {
     uniqueUrlVisitPerSesion.show(50,false)
 
 
+    //predictUniqueUrlVisit(uniqueUrlVisitPerSesion);
+
     //////////////////////////////////////////
     //// Most Engaged user
     //////////////////////////////////////////
@@ -78,8 +101,58 @@ object EtlTaskRunner extends TaskRunnerTrait {
     // this will give most engaged user and the average session time
     totalTimePerSessionDf.orderBy($"MaxSessionTimeInSeconds".desc).show(50,false)
 
+  }
+
+  def generateAverageUserSessionTime(df:DataFrame): Unit ={
 
   }
+
+
+
+
+
+  def predictNoOfRequest(df:DataFrame): Unit ={
+
+    var df1 = df.withColumn("label", col("no_of_request"))
+
+    var timeStampIndexer = new StringIndexer()
+      .setInputCol("timestamp_epoch").setOutputCol("TimestampEpochIndexer")
+
+    df1 = timeStampIndexer.fit(df1).transform(df1)
+
+    var noOfRequestIndexer = new StringIndexer()
+      .setInputCol("no_of_request").setOutputCol("NoOfRequestIndexer")
+
+    df1 = noOfRequestIndexer.fit(df1).transform(df1)
+
+    var assembler = new VectorAssembler().setInputCols(Array("TimestampEpochIndexer","NoOfRequestIndexer")).setOutputCol("features")
+
+    df1 = assembler.transform(df1)
+
+    var Array(train,test) = df1.randomSplit(Array(.9,.1))
+
+
+    var lr = new LinearRegression().setMaxIter(100).setRegParam(0.001).setElasticNetParam(0.0001)
+
+    var lrModel = lr.fit(train)
+
+    var lrPredictions = lrModel.transform(test)
+
+    lrPredictions.orderBy(col("timestamp_epoch").desc).show(100,false)
+
+    var r2= new RegressionEvaluator().setMetricName("r2").
+      setPredictionCol("prediction").
+      setLabelCol("label")
+
+    println(r2.evaluate(lrPredictions))
+
+  }
+
+  def predictUniqueUrlVisit(df:DataFrame): Unit ={
+
+  }
+
+
 
   /**
    * sessionizeWebLogs

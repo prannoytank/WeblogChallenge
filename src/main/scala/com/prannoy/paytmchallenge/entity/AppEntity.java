@@ -18,7 +18,8 @@ public class AppEntity {
     @Optional
     private long maxSessionTime = 15*60;
 
-    private List<String> runSequence;
+    @Optional
+    private List<String> runSequence = Arrays.asList("ETL");
 
     public static AppEntity getInstance()
     {
