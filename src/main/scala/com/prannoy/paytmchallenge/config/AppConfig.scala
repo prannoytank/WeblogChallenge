@@ -40,7 +40,7 @@ object AppConfig {
     }
 
 
-    val appConfig = ConfigFactory.parseFile(parseApplicationConfigFiles)
+    val appConfig = ConfigFactory.parseFile(new File(getClass.getResource("/application.conf").getPath))
 
     val config = ConfigFactory.parseMap(argsMap.asJava).withFallback(appConfig).resolve()
     appEntityObj = ConfigBeanFactory.create(config.getConfig("app"), classOf[AppEntity])

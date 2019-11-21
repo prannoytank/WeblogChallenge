@@ -1,8 +1,8 @@
 package com.prannoy.paytmchallenge.services.TaskRunner
 
-import org.apache.spark.sql.{DataFrame, SparkSession}
+import org.apache.spark.sql.{Column, ColumnName, DataFrame, SparkSession}
 import org.apache.spark.sql.expressions.Window
-import org.apache.spark.sql.functions.{col, collect_list, concat, countDistinct, dense_rank, explode, first, last, lit, row_number, udf}
+import org.apache.spark.sql.functions.{col, collect_list, concat, countDistinct, dense_rank, explode, first, last, lit, row_number, udf,unix_timestamp,sort_array}
 import org.apache.spark.sql.types.{DataTypes, IntegerType, LongType, StringType, StructField, StructType, TimestampType}
 
 import scala.collection.mutable.ListBuffer
@@ -28,8 +28,18 @@ object EtlTaskRunner extends TaskRunnerTrait {
       .schema(getSchema())
       .csv(appEntityObj.getFilePath)
 
+    /**
+     * Filtering based on information provided at https://docs.aws.amazon.com/elasticloadbalancing/latest/classic/access-log-collection.html#access-log-entry-format
+     * Filtered columns : backend:port,request_processing_time,backend_processing_time,response_processing_time
+     */
+    var filteredDf = df.filter($"backend:port" =!= "-")
+      .filter($"request_processing_time" =!= -1)
+      .filter($"backend_processing_time" =!= -1)
+      .filter($"response_processing_time" =!= -1)
+        .withColumn("timestamp_epoch", unix_timestamp($"timestamp")) // converting timestamp to epoch timestamp(seconds)
+
     // Getting the sessionized dataframe
-    val sessionizedDf = sessionizeWebLogs(df,spark)
+    val sessionizedDf = sessionizeWebLogs(filteredDf,spark)
 
     sessionizedDf.persist();
 
@@ -42,6 +52,7 @@ object EtlTaskRunner extends TaskRunnerTrait {
 
     val averageSessionTimePerUserDf = firstLastSessionPerUserDf.withColumn("AverageSessionTimeInSeconds", (col("last") - col("first"))/col("total_unique_sessions"))
 
+
     println("Average Session Time Per User")
     averageSessionTimePerUserDf.show(50,false)
 
@@ -49,21 +60,19 @@ object EtlTaskRunner extends TaskRunnerTrait {
     //////////////////////////////////////////
     //// unique url visit count per user per session
     //////////////////////////////////////////
-    val uniqueUrlVisitPerSesion=sessionizedDf.groupBy($"client:port",$"sess_id").agg(countDistinct($"request").as("count"))
+    val uniqueUrlVisitPerSesion=sessionizedDf.groupBy($"client:port",$"sess_id").agg(countDistinct($"request").as("total_unique_url_visit_count"))
 
     println("Unique Url Visit Per User Per Session")
     uniqueUrlVisitPerSesion.show(50,false)
 
 
     //////////////////////////////////////////
-    //// Most Engaged user with max time per user per session
+    //// Most Engaged user
     //////////////////////////////////////////
-    val firstLastSessionCountDf = sessionizedDf.groupBy($"client:port",$"sess_id").agg(first("timestamp_epoch").as("first"), last("timestamp_epoch").as("last"))
+    val firstLastSessionCountDf = sessionizedDf.groupBy($"client:port").agg(first("timestamp_epoch").as("first"), last("timestamp_epoch").as("last"))
 
-    //average and total time per user per session
     val totalTimePerSessionDf = firstLastSessionCountDf
       .withColumn("MaxSessionTimeInSeconds",col("last") - col("first"))
-    //.withColumn("averageSessionTime", (col("last") - col("first"))/col("cnt"))
 
     println("Most engaged user")
     // this will give most engaged user and the average session time
@@ -151,18 +160,20 @@ object EtlTaskRunner extends TaskRunnerTrait {
       }) // end of udf
     } // end of function
 
-    // window partition by client:port and order by timestamp in assending order
-    val windowSpec = Window.partitionBy("client:port").orderBy("timestamp")
+    // window partition by client:port and order by timestamp in ascending order
+    val windowSpec = Window.partitionBy("client:port").orderBy("timestamp_epoch")
 
     val r1=df
       .withColumn("uid",concat(lit("u"),lit("_"),dense_rank.over(Window.orderBy("client:port"))).cast("string")) // create unqiue user id
       .withColumn("row_number", row_number() over windowSpec) // assign unique row numbers to each group by frame
-      .withColumn("timestamp_epoch",$"timestamp".cast("long")) //casting timestamp to epoch/long format
+
+
+    //.withColumn("timestamp_epoch",$"timestamp".cast("long")) //casting timestamp to epoch/long format
     //.withColumn("time_diff",$"timestamp".cast("long") - lag($"timestamp", 1).over(windowSpec).cast("long"))
     //.withColumn("time_diff_in_a_frame",$"timestamp".cast("long") - first($"timestamp".cast("long"),true).over(windowSpec))
 
     val df2 = r1.
-      groupBy("uid").agg(collect_list($"timestamp_epoch").as("timestamp_epoch")) // collecting the list of timestamp per user
+      groupBy("uid").agg(sort_array(collect_list($"timestamp_epoch")).as("timestamp_epoch")) // collecting the list of timestamp per user
       .withColumn("click_sess_id",
         explode(myFuncWithArg(appEntityObj.getMaxSessionTime)(
           //struct(r1.col("uid"),r1.col("timestamp_epoch"),r1.col("time_diff_in_a_frame")))
