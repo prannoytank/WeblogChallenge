@@ -28,7 +28,7 @@ object ApplicationRunner {
       task.toLowerCase() match {
         case s if s.contains("etl") =>{
           println("---------------------- ETL JOB START ----------------------------------")
-          //EtlTaskRunner.run()
+          EtlTaskRunner.run()
           println("---------------------- ETL JOB END ------------------------------------")
         }
         case s if s.contains("streaming") => println("dummy spark streaming")
